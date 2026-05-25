@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: fashion-erp-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: fashion_erp_demo
+      MYSQL_USER: erp_user
+      MYSQL_PASSWORD: erp_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Redis Cache (optional, for future optimization)
+  redis:
+    image: redis:7-alpine
+    container_name: fashion-erp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 3s
+      retries: 5
+
+  # Fashion ERP Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fashion-erp-app
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: mysql://erp_user:erp_password@mysql:3306/fashion_erp_demo
+      JWT_SECRET: dev-jwt-secret
+      VITE_APP_ID: dev-app-id
+      OAUTH_SERVER_URL: https://api.manus.im
+      VITE_OAUTH_PORTAL_URL: https://manus.im
+      OWNER_NAME: Demo Owner
+      OWNER_OPEN_ID: demo-owner-id
+      BUILT_IN_FORGE_API_URL: https://api.manus.im
+      BUILT_IN_FORGE_API_KEY: dev-api-key
+      VITE_FRONTEND_FORGE_API_URL: https://api.manus.im
+      VITE_FRONTEND_FORGE_API_KEY: dev-frontend-key
+      VITE_ANALYTICS_ENDPOINT: https://analytics.manus.im
+      VITE_ANALYTICS_WEBSITE_ID: dev-website-id
+      VITE_APP_TITLE: Fashion ERP System
+      LOG_LEVEL: debug
+    ports:
+      - "3000:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/dist
+    command: pnpm dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: fashion-erp-network

@@ -1,4 +1,5 @@
-import { Workbook } from 'exceljs';
+import ExcelJS from 'exceljs';
+const { Workbook } = ExcelJS;
 import { storagePut } from '../storage';
 import {
   getOrdersByDateRange,
