@@ -36,6 +36,28 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  // Scheduled notification handler (heartbeat cron)
+  app.post("/api/scheduled/notifications", async (req, res) => {
+    try {
+      const { sdk } = await import("./sdk");
+      const user = await sdk.authenticateRequest(req);
+      if (!user.isCron || !user.taskUid) {
+        return res.status(403).json({ error: "cron-only" });
+      }
+      const { runAllNotificationChecks } = await import("../notifications-worker");
+      const results = await runAllNotificationChecks();
+      res.json({ ok: true, results, timestamp: new Date().toISOString() });
+    } catch (error: any) {
+      console.error("[Scheduled/Notifications] Error:", error);
+      res.status(500).json({
+        error: error.message || "Unknown error",
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+        context: { url: req.url, taskUid: "unknown" },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

@@ -22,6 +22,20 @@
       "when": 1779828801063,
       "tag": "0002_massive_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1779830234713,
+      "tag": "0003_opposite_enchantress",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1779830621545,
+      "tag": "0004_absurd_loki",
+      "breakpoints": true
     }
   ]
 }

@@ -3,12 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings2, Store, BarChart3, Truck, Bell, Shield } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Settings2, Store, BarChart3, Truck, Bell, Shield, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import { useState, useEffect } from "react";
 
 export default function Settings() {
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6" dir="rtl">
       <h1 className="text-2xl font-bold">الإعدادات</h1>
 
       <Tabs defaultValue="integrations" className="w-full">
@@ -87,23 +90,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <Bell className="h-5 w-5 text-orange-500" />
-                <CardTitle className="text-lg">إعدادات الإشعارات</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <NotificationToggle label="تنبيه انخفاض المخزون" description="إشعار عند وصول المخزون لحد أدنى" defaultChecked />
-                <NotificationToggle label="تنبيه التدفق النقدي السلبي" description="إشعار عند انخفاض الرصيد" defaultChecked />
-                <NotificationToggle label="تنبيه الطلبات الخاسرة" description="إشعار عند وجود طلبات بهامش سلبي" defaultChecked />
-                <NotificationToggle label="ملخص مالي يومي" description="تقرير يومي بالأداء المالي" defaultChecked />
-                <NotificationToggle label="تنبيه فشل التسليم" description="إشعار عند فشل تسليم شحنة" defaultChecked />
-              </div>
-            </CardContent>
-          </Card>
+          <NotificationPreferencesPanel />
         </TabsContent>
 
         <TabsContent value="team" className="space-y-4 mt-4">
@@ -152,21 +139,135 @@ export default function Settings() {
   );
 }
 
-function NotificationToggle({ label, description, defaultChecked }: { label: string; description: string; defaultChecked?: boolean }) {
+function NotificationPreferencesPanel() {
+  const { data: prefs, isLoading } = trpc.notifications.getPreferences.useQuery();
+  const saveMutation = trpc.notifications.savePreferences.useMutation({
+    onSuccess: () => toast.success("تم حفظ إعدادات الإشعارات"),
+    onError: () => toast.error("فشل حفظ الإعدادات"),
+  });
+
+  const [localPrefs, setLocalPrefs] = useState({
+    lowInventory: true,
+    negativeCashflow: true,
+    highCostOrders: true,
+    failedDelivery: true,
+    dailySummary: true,
+  });
+
+  useEffect(() => {
+    if (prefs) {
+      setLocalPrefs({
+        lowInventory: prefs.lowInventory ?? true,
+        negativeCashflow: prefs.negativeCashflow ?? true,
+        highCostOrders: prefs.highCostOrders ?? true,
+        failedDelivery: prefs.failedDelivery ?? true,
+        dailySummary: prefs.dailySummary ?? true,
+      });
+    }
+  }, [prefs]);
+
+  const handleToggle = (key: keyof typeof localPrefs) => {
+    setLocalPrefs(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleSave = () => {
+    saveMutation.mutate(localPrefs);
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6 flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <Bell className="h-5 w-5 text-orange-500" />
+          <div>
+            <CardTitle className="text-lg">إعدادات الإشعارات</CardTitle>
+            <CardDescription>تحكم في التنبيهات التلقائية التي يرسلها النظام</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <NotificationToggle
+            label="تنبيه انخفاض المخزون"
+            description="إشعار عند وصول المخزون لحد إعادة الطلب"
+            checked={localPrefs.lowInventory}
+            onToggle={() => handleToggle('lowInventory')}
+          />
+          <NotificationToggle
+            label="تنبيه التدفق النقدي السلبي"
+            description="إشعار عند تحول التدفق النقدي للسلبي خلال 30 يوم"
+            checked={localPrefs.negativeCashflow}
+            onToggle={() => handleToggle('negativeCashflow')}
+          />
+          <NotificationToggle
+            label="تنبيه الطلبات الخاسرة"
+            description="إشعار عند اكتشاف طلبات بتكلفة أعلى من الإيراد"
+            checked={localPrefs.highCostOrders}
+            onToggle={() => handleToggle('highCostOrders')}
+          />
+          <NotificationToggle
+            label="تنبيه فشل التسليم"
+            description="إشعار عند فشل تسليم شحنة للعميل"
+            checked={localPrefs.failedDelivery}
+            onToggle={() => handleToggle('failedDelivery')}
+          />
+          <NotificationToggle
+            label="ملخص مالي يومي"
+            description="تقرير يومي بإجمالي الطلبات والإيرادات والتدفق النقدي"
+            checked={localPrefs.dailySummary}
+            onToggle={() => handleToggle('dailySummary')}
+          />
+
+          <div className="pt-4 border-t">
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+              {saveMutation.isPending && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
+              حفظ الإعدادات
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NotificationToggle({ label, description, checked, onToggle }: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
   return (
     <div className="flex items-center justify-between p-3 rounded-lg border">
       <div>
         <p className="font-medium">{label}</p>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-      <input type="checkbox" defaultChecked={defaultChecked} className="h-5 w-5 rounded" />
+      <Switch checked={checked} onCheckedChange={onToggle} />
     </div>
   );
 }
 
 function RoleCard({ role, description, color }: { role: string; description: string; color: string }) {
+  const bgColors: Record<string, string> = {
+    purple: "bg-purple-50/50 border-purple-200",
+    blue: "bg-blue-50/50 border-blue-200",
+    green: "bg-green-50/50 border-green-200",
+    orange: "bg-orange-50/50 border-orange-200",
+    pink: "bg-pink-50/50 border-pink-200",
+    teal: "bg-teal-50/50 border-teal-200",
+  };
   return (
-    <div className={`p-3 rounded-lg border bg-${color}-50/30`}>
+    <div className={`p-3 rounded-lg border ${bgColors[color] || "bg-gray-50/50"}`}>
       <p className="font-medium">{role}</p>
       <p className="text-sm text-muted-foreground">{description}</p>
     </div>

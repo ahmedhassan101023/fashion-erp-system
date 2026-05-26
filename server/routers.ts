@@ -477,6 +477,136 @@ export const appRouter = router({
     }),
   }),
 
+  // ============ AI INSIGHTS ============
+  aiInsights: router({
+    getInsights: protectedProcedure.query(async () => {
+      const { runAnomalyDetection } = await import('./ai/anomaly-detection');
+      const { generateCashflowForecast } = await import('./ai/cashflow-forecast');
+      const { forecastProductInventory } = await import('./ai/inventory-forecast');
+      const { generateAnomalyRecommendations } = await import('./ai/recommendation-engine');
+
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      // Run anomaly detection
+      let anomalies: any[] = [];
+      try {
+        anomalies = await runAnomalyDetection(thirtyDaysAgo, now);
+      } catch (e) {
+        console.error('[AI Insights] Anomaly detection error:', e);
+      }
+
+      // Run cashflow forecast with sample historical data
+      let cashflowForecast = null;
+      try {
+        const db = await getDb();
+        if (db) {
+          const cashflowData = await db.select().from(cashflowTransactions).orderBy(desc(cashflowTransactions.transactionDate)).limit(30);
+          const dailySales = cashflowData.filter(c => c.transactionType === 'incoming').map(c => Number(c.amount));
+          const dailyAdSpend = cashflowData.filter(c => c.category === 'advertising').map(c => Number(c.amount));
+
+          cashflowForecast = await generateCashflowForecast(
+            dailySales.reduce((a, b) => a + b, 0), // current cash position
+            {
+              dailySales: dailySales.length > 0 ? dailySales : [5000, 6000, 4500, 7000, 5500],
+              dailyAdSpend: dailyAdSpend.length > 0 ? dailyAdSpend : [1000, 1200, 800, 1500, 900],
+              dailyCOGS: [2000, 2500, 1800, 3000, 2200],
+              codCollections: [3000, 3500, 2800, 4000, 3200],
+              monthlyPayroll: 25000,
+              monthlyOperational: 15000,
+            },
+            30
+          );
+        }
+      } catch (e) {
+        console.error('[AI Insights] Cashflow forecast error:', e);
+      }
+
+      // Get inventory alerts from products below reorder point
+      let inventoryAlerts: any[] = [];
+      try {
+        const db = await getDb();
+        if (db) {
+          const lowStock = await db.select().from(products)
+            .where(sql`${products.stockQuantity} < ${products.reorderPoint}`);
+          inventoryAlerts = lowStock.map(p => ({
+            id: `inv_${p.id}`,
+            type: 'stockout_risk',
+            severity: p.stockQuantity === 0 ? 'critical' : p.stockQuantity < 5 ? 'high' : 'medium',
+            productId: p.id,
+            sku: p.sku,
+            productName: p.name,
+            title: `مخزون منخفض: ${p.name}`,
+            description: `المخزون الحالي ${p.stockQuantity} وحدة - أقل من حد إعادة الطلب (${p.reorderPoint})`,
+            recommendedAction: `إعادة طلب ${p.reorderPoint * 2} وحدة على الأقل`,
+            financialImpact: 0,
+            confidence: 0.9,
+            detectedAt: new Date(),
+          }));
+        }
+      } catch (e) {
+        console.error('[AI Insights] Inventory alerts error:', e);
+      }
+
+      // Generate recommendations
+      let recommendations: any[] = [];
+      try {
+        recommendations = generateAnomalyRecommendations(anomalies);
+      } catch (e) {
+        console.error('[AI Insights] Recommendations error:', e);
+      }
+
+      return {
+        anomalies,
+        cashflowForecast,
+        inventoryAlerts,
+        recommendations,
+        generatedAt: new Date(),
+      };
+    }),
+  }),
+
+  // ============ NOTIFICATIONS ============
+  notifications: router({
+    getPreferences: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const { notificationPreferences } = await import("../drizzle/schema");
+      const result = await db.select().from(notificationPreferences)
+        .where(eq(notificationPreferences.userId, ctx.user!.id)).limit(1);
+      return result[0] || { lowInventory: true, negativeCashflow: true, highCostOrders: true, failedDelivery: true, dailySummary: true };
+    }),
+    savePreferences: protectedProcedure.input(z.object({
+      lowInventory: z.boolean(),
+      negativeCashflow: z.boolean(),
+      highCostOrders: z.boolean(),
+      failedDelivery: z.boolean(),
+      dailySummary: z.boolean(),
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const { notificationPreferences } = await import("../drizzle/schema");
+      // Upsert: try insert, on duplicate update
+      await db.insert(notificationPreferences).values({
+        userId: ctx.user!.id,
+        ...input,
+      }).onDuplicateKeyUpdate({
+        set: input,
+      });
+      return { success: true };
+    }),
+    runChecks: ownerProcedure.mutation(async () => {
+      const { runAllNotificationChecks } = await import("./notifications-worker");
+      return await runAllNotificationChecks();
+    }),
+    getEvents: protectedProcedure.input(z.object({ limit: z.number().default(20) }).optional()).query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(businessEvents).orderBy(desc(businessEvents.createdAt)).limit(input?.limit || 20);
+    }),
+  }),
+
   // ============ TEAM ============
   team: router({
     getMembers: protectedProcedure.query(async () => {

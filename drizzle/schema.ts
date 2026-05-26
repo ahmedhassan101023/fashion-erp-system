@@ -30,6 +30,8 @@ export const products = mysqlTable("products", {
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   category: varchar("category", { length: 100 }),
+  stockQuantity: int("stockQuantity").default(0).notNull(),
+  reorderPoint: int("reorderPoint").default(10).notNull(),
   status: mysqlEnum("status", ["active", "inactive", "discontinued"]).default("active"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -499,3 +501,63 @@ export const dailyExpenses = mysqlTable("dailyExpenses", {
 
 export type DailyExpense = typeof dailyExpenses.$inferSelect;
 export type InsertDailyExpense = typeof dailyExpenses.$inferInsert;
+
+// ============ UPLOADED FILES (S3 PERSISTENCE) ============
+
+export const uploadedFiles = mysqlTable("uploadedFiles", {
+  id: int("id").autoincrement().primaryKey(),
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  fileUrl: varchar("fileUrl", { length: 512 }).notNull(),
+  fileName: varchar("fileName", { length: 255 }).notNull(),
+  mimeType: varchar("mimeType", { length: 100 }).notNull(),
+  fileSize: int("fileSize").notNull(), // bytes
+  uploadedBy: int("uploadedBy").notNull(),
+  relatedType: varchar("relatedType", { length: 50 }), // 'supplier_invoice', 'product_image', 'receipt', etc.
+  relatedId: int("relatedId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  uploadedByIdx: index("idx_file_uploaded_by").on(table.uploadedBy),
+  relatedIdx: index("idx_file_related").on(table.relatedType, table.relatedId),
+}));
+
+export type UploadedFile = typeof uploadedFiles.$inferSelect;
+export type InsertUploadedFile = typeof uploadedFiles.$inferInsert;
+
+// ============ EXPORT HISTORY ============
+
+export const exportHistory = mysqlTable("exportHistory", {
+  id: int("id").autoincrement().primaryKey(),
+  reportType: varchar("reportType", { length: 100 }).notNull(),
+  format: varchar("format", { length: 10 }).notNull(), // 'excel', 'csv', 'pdf'
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  fileUrl: varchar("fileUrl", { length: 512 }).notNull(),
+  fileName: varchar("fileName", { length: 255 }).notNull(),
+  fileSize: int("fileSize"),
+  generatedBy: int("generatedBy").notNull(),
+  dateRangeStart: timestamp("dateRangeStart"),
+  dateRangeEnd: timestamp("dateRangeEnd"),
+  generatedAt: timestamp("generatedAt").defaultNow().notNull(),
+}, (table) => ({
+  generatedByIdx: index("idx_export_generated_by").on(table.generatedBy),
+  reportTypeIdx: index("idx_export_report_type").on(table.reportType),
+}));
+
+export type ExportHistoryRecord = typeof exportHistory.$inferSelect;
+export type InsertExportHistory = typeof exportHistory.$inferInsert;
+
+// ============ NOTIFICATION PREFERENCES ============
+
+export const notificationPreferences = mysqlTable("notificationPreferences", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  lowInventory: boolean("lowInventory").default(true).notNull(),
+  negativeCashflow: boolean("negativeCashflow").default(true).notNull(),
+  highCostOrders: boolean("highCostOrders").default(true).notNull(),
+  failedDelivery: boolean("failedDelivery").default(true).notNull(),
+  dailySummary: boolean("dailySummary").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreference = typeof notificationPreferences.$inferInsert;

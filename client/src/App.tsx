@@ -14,6 +14,7 @@ import Shipping from "./pages/Shipping";
 import Team from "./pages/Team";
 import Customers from "./pages/Customers";
 import Settings from "./pages/Settings";
+import AIInsights from "./pages/AIInsights";
 import DashboardLayout from "./components/DashboardLayout";
 
 function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
@@ -54,6 +55,9 @@ function Router() {
       </Route>
       <Route path="/settings">
         <AuthenticatedLayout><Settings /></AuthenticatedLayout>
+      </Route>
+      <Route path="/ai-insights">
+        <AuthenticatedLayout><AIInsights /></AuthenticatedLayout>
       </Route>
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
