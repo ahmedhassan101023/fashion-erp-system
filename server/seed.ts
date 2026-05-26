@@ -108,8 +108,8 @@ const sampleOrders = [
     customerId: "CUST-001",
     orderDate: new Date("2026-05-20"),
     totalRevenue: "89.97",
-    status: "completed",
-    fulfillmentStatus: "delivered",
+    status: "delivered",
+    fulfillmentStatus: "fulfilled",
     paymentMethod: "credit_card",
     notes: "Demo order 1",
   },
@@ -118,8 +118,8 @@ const sampleOrders = [
     customerId: "CUST-002",
     orderDate: new Date("2026-05-21"),
     totalRevenue: "129.96",
-    status: "completed",
-    fulfillmentStatus: "delivered",
+    status: "delivered",
+    fulfillmentStatus: "fulfilled",
     paymentMethod: "credit_card",
     notes: "Demo order 2",
   },
@@ -128,8 +128,8 @@ const sampleOrders = [
     customerId: "CUST-003",
     orderDate: new Date("2026-05-22"),
     totalRevenue: "59.99",
-    status: "completed",
-    fulfillmentStatus: "in_transit",
+    status: "shipped",
+    fulfillmentStatus: "fulfilled",
     paymentMethod: "cod",
     notes: "Demo order 3 - COD",
   },
@@ -138,8 +138,8 @@ const sampleOrders = [
     customerId: "CUST-001",
     orderDate: new Date("2026-05-23"),
     totalRevenue: "44.99",
-    status: "completed",
-    fulfillmentStatus: "delivered",
+    status: "delivered",
+    fulfillmentStatus: "fulfilled",
     paymentMethod: "credit_card",
     notes: "Demo order 4",
   },
@@ -148,10 +148,10 @@ const sampleOrders = [
     customerId: "CUST-004",
     orderDate: new Date("2026-05-24"),
     totalRevenue: "109.98",
-    status: "pending",
-    fulfillmentStatus: "pending",
+    status: "processing",
+    fulfillmentStatus: "unfulfilled",
     paymentMethod: "credit_card",
-    notes: "Demo order 5 - Pending",
+    notes: "Demo order 5 - Processing",
   },
 ];
 
@@ -457,7 +457,10 @@ async function seedDatabase() {
 }
 
 // Run seed if executed directly
-if (require.main === module) {
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+
+if (process.argv[1].endsWith('seed.ts')) {
   seedDatabase()
     .then(() => process.exit(0))
     .catch((error) => {
