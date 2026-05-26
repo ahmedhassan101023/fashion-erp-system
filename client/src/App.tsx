@@ -6,37 +6,68 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
+import Products from "./pages/Products";
+import Accounting from "./pages/Accounting";
+import Campaigns from "./pages/Campaigns";
+import Orders from "./pages/Orders";
+import Shipping from "./pages/Shipping";
+import Team from "./pages/Team";
+import Customers from "./pages/Customers";
+import Settings from "./pages/Settings";
+import DashboardLayout from "./components/DashboardLayout";
+
+function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <DashboardLayout>
+      {children}
+    </DashboardLayout>
+  );
+}
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path="" component={Home} />
-      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/" component={Home} />
+      <Route path="/dashboard">
+        <AuthenticatedLayout><Dashboard /></AuthenticatedLayout>
+      </Route>
+      <Route path="/products">
+        <AuthenticatedLayout><Products /></AuthenticatedLayout>
+      </Route>
+      <Route path="/accounting">
+        <AuthenticatedLayout><Accounting /></AuthenticatedLayout>
+      </Route>
+      <Route path="/campaigns">
+        <AuthenticatedLayout><Campaigns /></AuthenticatedLayout>
+      </Route>
+      <Route path="/orders">
+        <AuthenticatedLayout><Orders /></AuthenticatedLayout>
+      </Route>
+      <Route path="/shipping">
+        <AuthenticatedLayout><Shipping /></AuthenticatedLayout>
+      </Route>
+      <Route path="/team">
+        <AuthenticatedLayout><Team /></AuthenticatedLayout>
+      </Route>
+      <Route path="/customers">
+        <AuthenticatedLayout><Customers /></AuthenticatedLayout>
+      </Route>
+      <Route path="/settings">
+        <AuthenticatedLayout><Settings /></AuthenticatedLayout>
+      </Route>
       <Route path="/404" component={NotFound} />
-      {/* Final fallback route */}
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
-          <div className="min-h-screen" dir="auto">
-            <Router />
-          </div>
+          <Router />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

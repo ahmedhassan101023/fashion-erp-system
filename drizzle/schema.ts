@@ -390,3 +390,112 @@ export const auditLog = mysqlTable("auditLog", {
 
 export type AuditLogEntry = typeof auditLog.$inferSelect;
 export type InsertAuditLogEntry = typeof auditLog.$inferInsert;
+
+// ============ CUSTOMERS / CRM ============
+
+export const customers = mysqlTable("customers", {
+  id: int("id").autoincrement().primaryKey(),
+  shopifyCustomerId: varchar("shopifyCustomerId", { length: 64 }).unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }),
+  phone: varchar("phone", { length: 50 }),
+  city: varchar("city", { length: 100 }),
+  country: varchar("country", { length: 100 }),
+  totalOrders: int("totalOrders").default(0),
+  totalSpent: decimal("totalSpent", { precision: 12, scale: 2 }).default("0"),
+  lastOrderDate: timestamp("lastOrderDate"),
+  tags: text("tags"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  emailIdx: index("idx_customer_email").on(table.email),
+  shopifyIdx: index("idx_customer_shopify").on(table.shopifyCustomerId),
+}));
+
+export type Customer = typeof customers.$inferSelect;
+export type InsertCustomer = typeof customers.$inferInsert;
+
+// ============ SUPPLIERS ============
+
+export const suppliers = mysqlTable("suppliers", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  contactPerson: varchar("contactPerson", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  email: varchar("email", { length: 320 }),
+  address: text("address"),
+  balance: decimal("balance", { precision: 12, scale: 2 }).default("0"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Supplier = typeof suppliers.$inferSelect;
+export type InsertSupplier = typeof suppliers.$inferInsert;
+
+// ============ TEAM TASKS ============
+
+export const tasks = mysqlTable("tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  assignedTo: int("assignedTo"),
+  createdBy: int("createdBy").notNull(),
+  dueDate: timestamp("dueDate"),
+  status: mysqlEnum("status", ["pending", "in_progress", "completed", "overdue"]).default("pending"),
+  priority: mysqlEnum("priority", ["low", "medium", "high", "urgent"]).default("medium"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  assignedIdx: index("idx_task_assigned").on(table.assignedTo),
+  statusIdx: index("idx_task_status").on(table.status),
+}));
+
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = typeof tasks.$inferInsert;
+
+// ============ TEAM NOTES ============
+
+export const notes = mysqlTable("notes", {
+  id: int("id").autoincrement().primaryKey(),
+  content: text("content").notNull(),
+  createdBy: int("createdBy").notNull(),
+  relatedType: varchar("relatedType", { length: 50 }),
+  relatedId: int("relatedId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  createdByIdx: index("idx_note_created_by").on(table.createdBy),
+}));
+
+export type Note = typeof notes.$inferSelect;
+export type InsertNote = typeof notes.$inferInsert;
+
+// ============ CAPITAL & DAILY EXPENSES ============
+
+export const capitalEntries = mysqlTable("capitalEntries", {
+  id: int("id").autoincrement().primaryKey(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  description: varchar("description", { length: 255 }),
+  entryDate: timestamp("entryDate").notNull(),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CapitalEntry = typeof capitalEntries.$inferSelect;
+export type InsertCapitalEntry = typeof capitalEntries.$inferInsert;
+
+export const dailyExpenses = mysqlTable("dailyExpenses", {
+  id: int("id").autoincrement().primaryKey(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull(),
+  description: varchar("description", { length: 255 }).notNull(),
+  supplierId: int("supplierId"),
+  expenseDate: timestamp("expenseDate").notNull(),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DailyExpense = typeof dailyExpenses.$inferSelect;
+export type InsertDailyExpense = typeof dailyExpenses.$inferInsert;

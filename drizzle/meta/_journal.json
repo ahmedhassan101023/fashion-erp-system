@@ -15,6 +15,13 @@
       "when": 1779394855358,
       "tag": "0001_clear_betty_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1779828801063,
+      "tag": "0002_massive_jack_power",
+      "breakpoints": true
     }
   ]
 }
