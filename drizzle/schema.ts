@@ -561,3 +561,35 @@ export const notificationPreferences = mysqlTable("notificationPreferences", {
 
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;
 export type InsertNotificationPreference = typeof notificationPreferences.$inferInsert;
+
+// ============ TEAM MEMBERS (Invited Accounts) ============
+export const teamMembers = mysqlTable("teamMembers", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").unique(), // null until they first log in via OAuth
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  tempPassword: varchar("tempPassword", { length: 255 }), // hashed; cleared after first login
+  role: mysqlEnum("role", ["accountant", "media_buyer", "operations", "customer_support", "inventory_manager", "admin"]).notNull().default("operations"),
+  permissions: json("permissions").$type<string[]>().default([]),
+  status: mysqlEnum("status", ["pending", "active", "suspended"]).notNull().default("pending"),
+  invitedBy: int("invitedBy").notNull(),
+  invitedAt: timestamp("invitedAt").defaultNow().notNull(),
+  lastLoginAt: timestamp("lastLoginAt"),
+  notes: text("notes"),
+}, (table) => ({
+  emailIdx: index("idx_team_email").on(table.email),
+  statusIdx: index("idx_team_status").on(table.status),
+}));
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertTeamMember = typeof teamMembers.$inferInsert;
+
+// ============ SITE SETTINGS (Password Lock & Config) ============
+export const siteSettings = mysqlTable("siteSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  settingKey: varchar("settingKey", { length: 128 }).notNull().unique(),
+  settingValue: text("settingValue"),
+  updatedBy: int("updatedBy"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SiteSetting = typeof siteSettings.$inferSelect;
+export type InsertSiteSetting = typeof siteSettings.$inferInsert;

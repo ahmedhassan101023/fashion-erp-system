@@ -3,18 +3,21 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, ownerProcedure, router } from "./_core/trpc";
 import { reportingRouter } from "./routers/reporting";
+import { integrationsRouter } from "./routers/integrations";
 import { z } from "zod";
 import { getDb } from "./db";
 import {
   products, productCosts, productPricing, orders, orderLineItems, orderProfitability,
   cashflowTransactions, metaCampaigns, customers, suppliers, tasks, notes,
   capitalEntries, dailyExpenses, journalEntries, journalLines, chartOfAccounts,
-  fulfillments, businessEvents, auditLog
+  fulfillments, businessEvents, auditLog, teamMembers, siteSettings
 } from "../drizzle/schema";
+import crypto from "crypto";
 import { eq, desc, sql, and, gte, lte, count, sum } from "drizzle-orm";
 
 export const appRouter = router({
   system: systemRouter,
+  integrations: integrationsRouter,
   reporting: reportingRouter,
 
   auth: router({
@@ -565,6 +568,125 @@ export const appRouter = router({
         generatedAt: new Date(),
       };
     }),
+
+    // ---- Fraud Detection ----
+    runFraudDetection: protectedProcedure.query(async () => {
+      const { runFraudAnalysis } = await import('./ai/fraud-detection');
+      const db = await getDb();
+      if (!db) return null;
+
+      // Collect all financial transaction amounts
+      const txns = await db.select().from(cashflowTransactions)
+        .orderBy(desc(cashflowTransactions.transactionDate))
+        .limit(500);
+
+      const transactions = txns.map(t => ({
+        id: t.id,
+        amount: Math.abs(Number(t.amount)),
+        type: t.transactionType,
+      }));
+
+      if (transactions.length < 10) {
+        return { message: 'بيانات غير كافية للتحليل (يلزم 10 معاملات على الأقل)', report: null };
+      }
+
+      const report = runFraudAnalysis(transactions);
+      return { report, transactionCount: transactions.length };
+    }),
+
+    // ---- What-If Scenario Simulator ----
+    runScenarios: protectedProcedure
+      .input(z.object({
+        monthlyRevenue: z.number(),
+        monthlyOrders: z.number(),
+        avgOrderValue: z.number(),
+        grossMarginPercent: z.number(),
+        adSpend: z.number(),
+        returnRate: z.number(),
+        shippingCostPerOrder: z.number(),
+        cac: z.number(),
+        operationalOverhead: z.number(),
+        taxRate: z.number().default(0.14),
+      }))
+      .mutation(async ({ input }) => {
+        const { runScenarioComparison, generateStandardScenarios } = await import('./ai/scenario-simulator');
+        const scenarios = generateStandardScenarios(input);
+        const results = runScenarioComparison(input, scenarios);
+        return { results, baseline: input };
+      }),
+
+    // ---- Landed Cost Analysis ----
+    analyzeLandedCost: protectedProcedure
+      .input(z.object({
+        productId: z.number(),
+        sku: z.string(),
+        productName: z.string(),
+        supplierCost: z.number(),
+        freightInPerUnit: z.number().default(0),
+        customsDuties: z.number().default(0),
+        packagingCost: z.number().default(0),
+        qualityControlCost: z.number().default(0),
+        storageMonthlyTotal: z.number().default(0),
+        unitsInStorage: z.number().default(1),
+        overheadMonthlyTotal: z.number().default(0),
+        totalMonthlyUnits: z.number().default(1),
+        sellingPrice: z.number(),
+        shippingOutPerOrder: z.number().default(0),
+        paymentGatewayRate: z.number().default(0.025),
+        returnRate: z.number().default(0.05),
+        returnProcessingCost: z.number().default(0),
+        adSpendMonthly: z.number().default(0),
+        unitsSoldMonthly: z.number().default(1),
+      }))
+      .mutation(async ({ input }) => {
+        const { calculateLandedCost } = await import('./ai/landed-cost');
+        return calculateLandedCost(input);
+      }),
+
+    // ---- Data Reconciliation ----
+    runReconciliation: protectedProcedure.query(async () => {
+      const { runFullReconciliation } = await import('./ai/reconciliation');
+      const db = await getDb();
+      if (!db) return null;
+
+      // Gather accounting data for reconciliation
+      const [journalEntriesRaw, ordersRaw] = await Promise.all([
+        db.select().from(journalEntries).limit(200),
+        db.select().from(orders).limit(200),
+      ]);
+
+      // Compute per-entry debit/credit totals from journal lines
+      const journalLinesRaw = await db.select().from(journalLines).limit(1000);
+      const linesByEntry = new Map<number, typeof journalLinesRaw>();
+      for (const line of journalLinesRaw) {
+        const arr = linesByEntry.get(line.journalEntryId) || [];
+        arr.push(line);
+        linesByEntry.set(line.journalEntryId, arr);
+      }
+
+      const accountingInput = {
+        journalEntries: journalEntriesRaw.map(je => {
+          const lines = linesByEntry.get(je.id) || [];
+          const totalDebits = lines.reduce((s, l) => s + Number(l.debitAmount || 0), 0);
+          const totalCredits = lines.reduce((s, l) => s + Number(l.creditAmount || 0), 0);
+          return {
+            id: je.id,
+            totalDebits,
+            totalCredits,
+            referenceType: je.referenceType ?? 'unknown',
+            referenceId: je.referenceId ?? 0,
+          };
+        }),
+        orders: ordersRaw.map(o => ({
+          id: o.id,
+          revenue: Number(o.totalRevenue),
+          status: o.status ?? 'unknown',
+        })),
+      };
+
+      const report = runFullReconciliation({ accounting: accountingInput });
+      return report;
+    }),
   }),
 
   // ============ NOTIFICATIONS ============
@@ -608,14 +730,187 @@ export const appRouter = router({
   }),
 
   // ============ TEAM ============
-  team: router({
+    team: router({
+    // List all users + invited team members
     getMembers: protectedProcedure.query(async () => {
       const db = await getDb();
       if (!db) return [];
       const { users: usersTable } = await import("../drizzle/schema");
-      return db.select().from(usersTable);
+      const [userRows, memberRows] = await Promise.all([
+        db.select().from(usersTable),
+        db.select().from(teamMembers),
+      ]);
+      // Merge: users who are also team members get enriched data
+      const memberByEmail = new Map(memberRows.map(m => [m.email, m]));
+      const merged = userRows.map(u => ({
+        ...u,
+        teamMember: u.email ? memberByEmail.get(u.email) ?? null : null,
+        source: 'user' as const,
+      }));
+      // Add pending invites not yet linked to a user
+      const pendingInvites = memberRows
+        .filter(m => m.status === 'pending')
+        .map(m => ({
+          id: -m.id,
+          openId: '',
+          name: m.name,
+          email: m.email,
+          loginMethod: 'invite',
+          role: m.role,
+          createdAt: m.invitedAt,
+          updatedAt: m.invitedAt,
+          lastSignedIn: m.invitedAt,
+          teamMember: m,
+          source: 'invite' as const,
+        }));
+      return [...merged, ...pendingInvites];
     }),
+
+    // Invite a new team member
+    inviteMember: ownerProcedure
+      .input(z.object({
+        name: z.string().min(2),
+        email: z.string().email(),
+        role: z.enum(['accountant', 'media_buyer', 'operations', 'customer_support', 'inventory_manager', 'admin']),
+        permissions: z.array(z.string()).default([]),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error('Database unavailable');
+
+        // Generate a secure temporary password
+        const tempPassword = crypto.randomBytes(6).toString('hex').toUpperCase();
+        // Hash it for storage (simple SHA-256 for temp passwords)
+        const hashedPassword = crypto.createHash('sha256').update(tempPassword).digest('hex');
+
+        // Check for duplicate email
+        const existing = await db.select({ id: teamMembers.id })
+          .from(teamMembers)
+          .where(eq(teamMembers.email, input.email))
+          .limit(1);
+        if (existing.length > 0) throw new Error('هذا البريد الإلكتروني مسجل بالفعل');
+
+        await db.insert(teamMembers).values({
+          name: input.name,
+          email: input.email,
+          tempPassword: hashedPassword,
+          role: input.role,
+          permissions: input.permissions,
+          status: 'pending',
+          invitedBy: ctx.user.id,
+          notes: input.notes,
+        });
+
+        // Send credentials to owner via notification
+        const { notifyOwner } = await import('./_core/notification');
+        const roleLabels: Record<string, string> = {
+          accountant: 'محاسب', media_buyer: 'مسؤول إعلانات', operations: 'عمليات',
+          customer_support: 'دعم العملاء', inventory_manager: 'مدير المخزون', admin: 'مدير',
+        };
+        await notifyOwner({
+          title: `✅ تمت دعوة عضو جديد: ${input.name}`,
+          content: `تم إنشاء حساب جديد لعضو الفريق:\n\n👤 الاسم: ${input.name}\n📧 البريد الإلكتروني: ${input.email}\n🔑 كلمة المرور المؤقتة: ${tempPassword}\n👔 الدور: ${roleLabels[input.role] || input.role}\n\n⚠️ يرجى إرسال هذه البيانات للعضو وطلب تغيير كلمة المرور عند أول تسجيل دخول.`,
+        });
+
+        return { success: true, email: input.email, tempPassword };
+      }),
+
+    // Update member role/permissions
+    updateMember: ownerProcedure
+      .input(z.object({
+        id: z.number(),
+        role: z.enum(['accountant', 'media_buyer', 'operations', 'customer_support', 'inventory_manager', 'admin']).optional(),
+        permissions: z.array(z.string()).optional(),
+        status: z.enum(['pending', 'active', 'suspended']).optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error('Database unavailable');
+        const { id, ...updates } = input;
+        await db.update(teamMembers).set(updates as any).where(eq(teamMembers.id, id));
+        return { success: true };
+      }),
+
+    // Remove a team member
+    removeMember: ownerProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error('Database unavailable');
+        await db.delete(teamMembers).where(eq(teamMembers.id, input.id));
+        return { success: true };
+      }),
+  }),
+
+  // ============ SITE SETTINGS ============
+  siteSettings: router({
+    getAll: ownerProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(siteSettings);
+    }),
+
+    getSetting: publicProcedure
+      .input(z.object({ key: z.string() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return null;
+        const rows = await db.select().from(siteSettings)
+          .where(eq(siteSettings.settingKey, input.key)).limit(1);
+        return rows[0] ?? null;
+      }),
+
+    setSetting: ownerProcedure
+      .input(z.object({ key: z.string(), value: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error('Database unavailable');
+        await db.insert(siteSettings)
+          .values({ settingKey: input.key, settingValue: input.value, updatedBy: ctx.user.id })
+          .onDuplicateKeyUpdate({ set: { settingValue: input.value, updatedBy: ctx.user.id } });
+        return { success: true };
+      }),
+
+    // Enable/disable site password lock
+    setSitePassword: ownerProcedure
+      .input(z.object({
+        enabled: z.boolean(),
+        password: z.string().min(4).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error('Database unavailable');
+
+        // Update enabled flag
+        await db.insert(siteSettings)
+          .values({ settingKey: 'site_password_enabled', settingValue: String(input.enabled), updatedBy: ctx.user.id })
+          .onDuplicateKeyUpdate({ set: { settingValue: String(input.enabled), updatedBy: ctx.user.id } });
+
+        // If a new password is provided, hash and store it
+        if (input.password) {
+          const hashed = crypto.createHash('sha256').update(input.password).digest('hex');
+          await db.insert(siteSettings)
+            .values({ settingKey: 'site_password_hash', settingValue: hashed, updatedBy: ctx.user.id })
+            .onDuplicateKeyUpdate({ set: { settingValue: hashed, updatedBy: ctx.user.id } });
+        }
+
+        return { success: true };
+      }),
+
+    // Verify site password (public — called before login)
+    verifySitePassword: publicProcedure
+      .input(z.object({ password: z.string() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { valid: false };
+        const rows = await db.select().from(siteSettings)
+          .where(eq(siteSettings.settingKey, 'site_password_hash')).limit(1);
+        const storedHash = rows[0]?.settingValue ?? '';
+        const inputHash = crypto.createHash('sha256').update(input.password).digest('hex');
+        return { valid: storedHash === inputHash };
+      }),
   }),
 });
-
 export type AppRouter = typeof appRouter;

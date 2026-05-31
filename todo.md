@@ -123,7 +123,8 @@
 - [x] Write unit tests for financial calculation engines
 - [x] Write integration tests for API endpoints
 - [x] Write end-to-end tests for critical workflows
-- [ ] Test Shopify sync accuracy
+- [x] Test Shopify sync accuracy
+- [x] Fix Shopify API integration (tRPC procedures, test connection, sync orders/products with pagination)
 - [ ] Test Meta Ads sync accuracy
 - [x] Test double-entry accounting consistency
 - [ ] Performance testing for large datasets
@@ -136,3 +137,16 @@
 - [ ] Set up monitoring and alerting
 - [ ] Create disaster recovery procedures
 - [ ] Deploy to production environment
+
+## Phase 16: CFO-Level Financial Intelligence (Enterprise Upgrade)
+- [ ] Implement Benford's Law fraud detection on transaction amounts
+- [ ] Build statistical anomaly detection for suspicious transactions
+- [ ] Create what-if scenario simulator (ad spend, return rate, shipping cost)
+- [ ] Implement true landed cost per SKU (COGS + shipping + duties + packaging)
+- [ ] Build SKU-level profitability breakdown with contribution margin
+- [ ] Add CFO insights dashboard with strategic recommendations
+- [ ] Implement data reconciliation validator (Shopify ↔ DB, Meta ↔ DB)
+- [ ] Build accounting integrity checker (debit/credit balance audit)
+- [ ] Add file retention/cleanup policy (auto-expire old exports)
+- [ ] Create system health monitoring dashboard
+- [ ] Write user guide and onboarding documentation

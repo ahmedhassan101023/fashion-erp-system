@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Settings2, Store, BarChart3, Truck, Bell, Shield, Loader2 } from "lucide-react";
+import { Settings2, Store, BarChart3, Truck, Bell, Shield, Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
@@ -23,27 +23,7 @@ export default function Settings() {
         </TabsList>
 
         <TabsContent value="integrations" className="space-y-4 mt-4">
-          {/* Shopify */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
-                  <Store className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Shopify</CardTitle>
-                  <CardDescription>ربط متجر Shopify لمزامنة الطلبات والمنتجات</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div><Label>رابط المتجر</Label><Input placeholder="your-store.myshopify.com" /></div>
-                <div><Label>Access Token</Label><Input type="password" placeholder="shpat_xxxxxxxx" /></div>
-                <Button onClick={() => toast.info("سيتم تفعيل الربط قريباً")}>ربط المتجر</Button>
-              </div>
-            </CardContent>
-          </Card>
+          <ShopifyIntegrationPanel />
 
           {/* Meta Ads */}
           <Card>
@@ -118,6 +98,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="system" className="space-y-4 mt-4">
+          <SitePasswordPanel />
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -271,5 +252,362 @@ function RoleCard({ role, description, color }: { role: string; description: str
       <p className="font-medium">{role}</p>
       <p className="text-sm text-muted-foreground">{description}</p>
     </div>
+  );
+}
+
+function SitePasswordPanel() {
+  const utils = trpc.useUtils();
+  const { data: enabledSetting } = trpc.siteSettings.getSetting.useQuery({ key: "site_password_enabled" });
+  const setSitePassword = trpc.siteSettings.setSitePassword.useMutation({
+    onSuccess: () => {
+      toast.success("تم تحديث إعدادات كلمة المرور");
+      utils.siteSettings.getSetting.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const isEnabled = enabledSetting?.settingValue === "true";
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPasswords, setShowPasswords] = useState(false);
+
+  const handleToggle = () => {
+    setSitePassword.mutate({ enabled: !isEnabled });
+  };
+
+  const handleChangePassword = () => {
+    if (!newPassword) return toast.error("أدخل كلمة المرور الجديدة");
+    if (newPassword !== confirmPassword) return toast.error("كلمتا المرور غير متطابقتين");
+    if (newPassword.length < 4) return toast.error("كلمة المرور يجب أن تكون 4 أحرف على الأقل");
+    setSitePassword.mutate({ enabled: isEnabled, password: newPassword });
+    setNewPassword("");
+    setConfirmPassword("");
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center">
+            <Shield className="h-5 w-5 text-red-600" />
+          </div>
+          <div>
+            <CardTitle className="text-lg">قفل الموقع بكلمة مرور</CardTitle>
+            <CardDescription>حماية الموقع بكلمة مرور قبل الوصول إليه</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {/* Toggle */}
+        <div className="flex items-center justify-between p-4 rounded-xl border bg-muted/30">
+          <div>
+            <p className="font-medium">تفعيل قفل الموقع</p>
+            <p className="text-sm text-muted-foreground">
+              {isEnabled ? "🔒 الموقع محمي بكلمة مرور" : "🔓 الموقع مفتوح للجميع"}
+            </p>
+          </div>
+          <Switch
+            checked={isEnabled}
+            onCheckedChange={handleToggle}
+            disabled={setSitePassword.isPending}
+          />
+        </div>
+
+        {/* Change Password */}
+        <div className="space-y-3">
+          <p className="text-sm font-medium">تغيير كلمة المرور</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>كلمة المرور الجديدة</Label>
+              <Input
+                type={showPasswords ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="••••••••"
+                dir="ltr"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>تأكيد كلمة المرور</Label>
+              <Input
+                type={showPasswords ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                dir="ltr"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPasswords(!showPasswords)}
+            >
+              {showPasswords ? <EyeOff className="h-4 w-4 ml-2" /> : <Eye className="h-4 w-4 ml-2" />}
+              {showPasswords ? "إخفاء" : "إظهار"}
+            </Button>
+            <Button
+              onClick={handleChangePassword}
+              disabled={!newPassword || setSitePassword.isPending}
+            >
+              {setSitePassword.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+              حفظ كلمة المرور
+            </Button>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground bg-amber-50 rounded-lg p-3 border border-amber-100">
+          ⚠️ عند تفعيل القفل، سيُطلب من كل زائر إدخال كلمة المرور قبل الوصول إلى الموقع. تأكد من حفظ كلمة المرور في مكان آمن.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============ SHOPIFY INTEGRATION PANEL ============
+function ShopifyIntegrationPanel() {
+  const utils = trpc.useUtils();
+  const { data: config, isLoading } = trpc.integrations.getShopifyConfig.useQuery();
+
+  const [shopName, setShopName] = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  const [apiVersion, setApiVersion] = useState("2024-01");
+  const [showToken, setShowToken] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; shopInfo?: any; error?: string } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ syncedCount: number; total: number } | null>(null);
+
+  // Pre-fill form when config loads
+  useEffect(() => {
+    if (config) {
+      setShopName(config.shopName ?? "");
+      setApiVersion(config.apiVersion ?? "2024-01");
+    }
+  }, [config]);
+
+  const saveConfig = trpc.integrations.saveShopifyConfig.useMutation({
+    onSuccess: () => {
+      toast.success("تم حفظ بيانات Shopify بنجاح");
+      utils.integrations.getShopifyConfig.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const testConnection = trpc.integrations.testShopifyConnection.useMutation({
+    onSuccess: (data) => {
+      setTestResult(data);
+      if (data.success) toast.success("✅ الاتصال ناجح!");
+      else toast.error(`❌ فشل الاتصال: ${data.error}`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const syncOrders = trpc.integrations.syncShopifyOrders.useMutation({
+    onSuccess: (data) => {
+      setSyncResult({ syncedCount: data.syncedCount, total: data.total });
+      toast.success(`تمت المزامنة: ${data.syncedCount} طلب جديد من أصل ${data.total}`);
+      utils.integrations.getSyncLogs.invalidate();
+    },
+    onError: (e) => toast.error(`فشل المزامنة: ${e.message}`),
+  });
+
+  const syncProducts = trpc.integrations.syncShopifyProducts.useMutation({
+    onSuccess: (data) => {
+      toast.success(`تمت مزامنة المنتجات: ${data.syncedCount} منتج جديد`);
+    },
+    onError: (e) => toast.error(`فشل مزامنة المنتجات: ${e.message}`),
+  });
+
+  const { data: syncLogs } = trpc.integrations.getSyncLogs.useQuery();
+
+  const isConnected = config?.status === "active";
+  const isError = config?.status === "error";
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
+              <Store className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Shopify</CardTitle>
+              <CardDescription>ربط متجر Shopify لمزامنة الطلبات والمنتجات تلقائياً</CardDescription>
+            </div>
+          </div>
+          {config && (
+            <span className={`text-xs px-3 py-1.5 rounded-full font-medium border ${
+              isConnected ? "bg-green-100 text-green-800 border-green-200" :
+              isError ? "bg-red-100 text-red-800 border-red-200" :
+              "bg-gray-100 text-gray-600 border-gray-200"
+            }`}>
+              {isConnected ? "✅ متصل" : isError ? "❌ خطأ في الاتصال" : "⏸ غير مفعل"}
+            </span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {/* Connection Form */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>اسم المتجر <span className="text-destructive">*</span></Label>
+            <Input
+              value={shopName}
+              onChange={(e) => setShopName(e.target.value)}
+              placeholder="your-store"
+              dir="ltr"
+            />
+            <p className="text-xs text-muted-foreground">بدون .myshopify.com</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>API Version</Label>
+            <Input
+              value={apiVersion}
+              onChange={(e) => setApiVersion(e.target.value)}
+              placeholder="2024-01"
+              dir="ltr"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Access Token <span className="text-destructive">*</span></Label>
+          <div className="relative">
+            <Input
+              type={showToken ? "text" : "password"}
+              value={accessToken}
+              onChange={(e) => setAccessToken(e.target.value)}
+              placeholder={config?.accessTokenMasked || "shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+              dir="ltr"
+              className="pl-10"
+            />
+            <button
+              type="button"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowToken(!showToken)}
+            >
+              {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            من Shopify Admin → Apps → Develop apps → Create an app → Admin API access token
+          </p>
+        </div>
+
+        {/* Error message */}
+        {isError && config?.syncErrorMessage && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+            <strong>آخر خطأ:</strong> {config.syncErrorMessage}
+          </div>
+        )}
+
+        {/* Test result */}
+        {testResult && (
+          <div className={`rounded-xl border p-4 ${testResult.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+            {testResult.success && testResult.shopInfo ? (
+              <div className="space-y-2">
+                <p className="font-medium text-green-800 flex items-center gap-2">
+                  ✅ تم الاتصال بنجاح بـ {testResult.shopInfo.name}
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-sm text-green-700">
+                  <span>📧 {testResult.shopInfo.email}</span>
+                  <span>💰 {testResult.shopInfo.currency}</span>
+                  <span>🌍 {testResult.shopInfo.country}</span>
+                  <span>📦 {testResult.shopInfo.plan}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-red-700 text-sm">❌ {testResult.error}</p>
+            )}
+          </div>
+        )}
+
+        {/* Sync result */}
+        {syncResult && (
+          <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
+            ✅ تمت المزامنة: <strong>{syncResult.syncedCount}</strong> طلب جديد من أصل <strong>{syncResult.total}</strong> طلب
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex flex-wrap gap-3">
+          <Button
+            variant="outline"
+            onClick={() => testConnection.mutate({ shopName, accessToken: accessToken, apiVersion })}
+            disabled={!shopName || testConnection.isPending}
+          >
+            {testConnection.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+            اختبار الاتصال
+          </Button>
+
+          <Button
+            onClick={() => {
+              if (!shopName || !accessToken) return toast.error("أدخل اسم المتجر والـ Access Token");
+              saveConfig.mutate({ shopName, accessToken, apiVersion });
+            }}
+            disabled={saveConfig.isPending}
+          >
+            {saveConfig.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+            حفظ البيانات
+          </Button>
+
+          {isConnected && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => syncOrders.mutate({})}
+                disabled={syncOrders.isPending}
+              >
+                {syncOrders.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+                مزامنة الطلبات
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => syncProducts.mutate()}
+                disabled={syncProducts.isPending}
+              >
+                {syncProducts.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+                مزامنة المنتجات
+              </Button>
+            </>
+          )}
+        </div>
+
+        {/* Sync logs */}
+        {syncLogs && syncLogs.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">سجل المزامنة الأخيرة</p>
+            <div className="rounded-xl border divide-y text-sm">
+              {syncLogs.slice(0, 5).map((log: any) => (
+                <div key={log.id} className="flex items-center justify-between px-4 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className={`w-2 h-2 rounded-full ${
+                      log.status === "completed" ? "bg-green-500" :
+                      log.status === "failed" ? "bg-red-500" :
+                      "bg-yellow-500"
+                    }`} />
+                    <span className="font-medium capitalize">{log.syncType === "orders" ? "طلبات" : "منتجات"}</span>
+                    {log.itemsProcessed != null && (
+                      <span className="text-muted-foreground">{log.itemsProcessed} عنصر</span>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(log.createdAt).toLocaleString("ar-EG")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Last sync */}
+        {config?.lastSyncDate && (
+          <p className="text-xs text-muted-foreground">
+            آخر مزامنة: {new Date(config.lastSyncDate).toLocaleString("ar-EG")}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
