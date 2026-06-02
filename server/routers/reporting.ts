@@ -3,7 +3,7 @@ import { ownerProcedure, protectedProcedure, router } from '../_core/trpc';
 import { generateReport } from '../reporting/export';
 import { getDb } from '../db';
 import { exportHistory, uploadedFiles } from '../../drizzle/schema';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, lt } from 'drizzle-orm';
 import { storagePut } from '../storage';
 
 /**
@@ -241,6 +241,35 @@ export const reportingRouter = router({
         return null;
       }
       return { fileUrl: file.fileUrl, fileName: file.fileName, mimeType: file.mimeType, fileSize: file.fileSize };
+    }),
+
+  /**
+   * File retention cleanup — removes export history records older than N days
+   * (S3 objects are unreferenced and effectively inaccessible after key is dropped)
+   */
+  cleanupOldExports: ownerProcedure
+    .input(z.object({ olderThanDays: z.number().min(7).max(365).default(90) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error('Database unavailable');
+
+      const cutoff = new Date(Date.now() - input.olderThanDays * 24 * 60 * 60 * 1000);
+
+      // Count records to be deleted first
+      const toDelete = await db
+        .select({ id: exportHistory.id })
+        .from(exportHistory)
+        .where(lt(exportHistory.generatedAt, cutoff));
+
+      if (toDelete.length === 0) return { deleted: 0, message: 'لا توجد ملفات قديمة للحذف' };
+
+      // Delete old export history (S3 keys become unreferenced = effectively deleted)
+      await db.delete(exportHistory).where(lt(exportHistory.generatedAt, cutoff));
+
+      return {
+        deleted: toDelete.length,
+        message: `تم حذف ${toDelete.length} تقرير أقدم من ${input.olderThanDays} يوم`,
+      };
     }),
 
   /**

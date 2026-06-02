@@ -16,23 +16,43 @@ async function shopifyFetch(
   shopName: string,
   accessToken: string,
   path: string,
-  apiVersion = "2024-01"
+  apiVersion = "2025-01"
 ) {
-  // Strip trailing .myshopify.com if user pasted full domain
-  const cleanShop = shopName.replace(/\.myshopify\.com\/?$/, "").trim();
+  // Strip trailing .myshopify.com / trailing slash / whitespace
+  const cleanShop = shopName
+    .replace(/https?:\/\//i, "")   // remove protocol if pasted
+    .replace(/\.myshopify\.com\/?$/, "")
+    .replace(/\/$/, "")
+    .trim();
+
+  // Trim the token — a stray space/newline causes 401 immediately
+  const cleanToken = accessToken.trim();
+
+  if (!cleanShop) throw new Error("اسم المتجر فارغ — أدخل اسم المتجر بدون .myshopify.com");
+  if (!cleanToken) throw new Error("Access Token فارغ — أدخل الـ Token من Shopify Admin");
+
   const url = `https://${cleanShop}.myshopify.com/admin/api/${apiVersion}${path}`;
 
   const res = await fetch(url, {
     headers: {
-      "X-Shopify-Access-Token": accessToken,
+      "X-Shopify-Access-Token": cleanToken,
       "Content-Type": "application/json",
+      "Accept": "application/json",
     },
   });
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    let hint = "";
+    if (res.status === 401) {
+      hint = " — تأكد أن الـ Access Token صحيح ولم ينتهِ صلاحيته، وأن التطبيق مفعّل في Shopify Admin";
+    } else if (res.status === 404) {
+      hint = " — تأكد من اسم المتجر (بدون .myshopify.com)";
+    } else if (res.status === 403) {
+      hint = " — التطبيق لا يملك صلاحية هذا الـ Scope، راجع API permissions في Shopify";
+    }
     throw new Error(
-      `Shopify API ${res.status} ${res.statusText}: ${body.slice(0, 200)}`
+      `Shopify API ${res.status} ${res.statusText}${hint}: ${body.slice(0, 300)}`
     );
   }
   return res.json();
@@ -44,23 +64,31 @@ async function shopifyFetchAll(
   accessToken: string,
   path: string,
   rootKey: string,
-  apiVersion = "2024-01"
+  apiVersion = "2025-01"
 ): Promise<any[]> {
-  const cleanShop = shopName.replace(/\.myshopify\.com\/?$/, "").trim();
+  const cleanShop = shopName
+    .replace(/https?:\/\//i, "")
+    .replace(/\.myshopify\.com\/?$/, "")
+    .replace(/\/$/, "")
+    .trim();
+  const cleanToken = accessToken.trim();
   let url = `https://${cleanShop}.myshopify.com/admin/api/${apiVersion}${path}`;
   const all: any[] = [];
 
   while (url) {
     const res = await fetch(url, {
       headers: {
-        "X-Shopify-Access-Token": accessToken,
+        "X-Shopify-Access-Token": cleanToken,
         "Content-Type": "application/json",
+        "Accept": "application/json",
       },
     });
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`Shopify API ${res.status}: ${body.slice(0, 200)}`);
+      let hint = "";
+      if (res.status === 401) hint = " — تأكد من صحة الـ Access Token";
+      throw new Error(`Shopify API ${res.status}${hint}: ${body.slice(0, 300)}`);
     }
 
     const data = await res.json();
@@ -115,25 +143,43 @@ export const integrationsRouter = router({
       const db = await getDb();
       if (!db) throw new Error("قاعدة البيانات غير متاحة");
 
-      const existing = await db.select({ id: shopifyIntegration.id })
+      // Normalise before saving — prevents 401 from stray whitespace
+      const cleanShop = input.shopName
+        .replace(/https?:\/\//i, "")
+        .replace(/\.myshopify\.com\/?$/, "")
+        .replace(/\/$/, "")
+        .trim();
+      const newToken = input.accessToken.trim();
+      const cleanVersion = (input.apiVersion || "2025-01").trim();
+
+      if (!cleanShop) throw new Error("اسم المتجر فارغ");
+
+      const existing = await db
+        .select({ id: shopifyIntegration.id, accessToken: shopifyIntegration.accessToken })
         .from(shopifyIntegration).limit(1);
+
+      // If no new token provided, preserve the existing one
+      const savedToken = existing[0]?.accessToken ?? "";
+      const cleanToken = newToken || savedToken;
+
+      if (!cleanToken) throw new Error("Access Token فارغ — أدخل الـ Token أولاً");
 
       if (existing.length) {
         await db
           .update(shopifyIntegration)
           .set({
-            shopName: input.shopName,
-            accessToken: input.accessToken,
-            apiVersion: input.apiVersion,
+            shopName: cleanShop,
+            accessToken: cleanToken,
+            apiVersion: cleanVersion,
             status: "active",
             syncErrorMessage: null,
           })
           .where(eq(shopifyIntegration.id, existing[0].id));
       } else {
         await db.insert(shopifyIntegration).values({
-          shopName: input.shopName,
-          accessToken: input.accessToken,
-          apiVersion: input.apiVersion,
+          shopName: cleanShop,
+          accessToken: cleanToken,
+          apiVersion: cleanVersion,
           status: "active",
         });
       }
@@ -154,19 +200,30 @@ export const integrationsRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
-      let token = input.accessToken;
+
+      // Always prefer the freshly-typed token; fall back to saved DB token
+      let token = input.accessToken.trim();
+      let shopName = input.shopName.trim();
+      let apiVersion = (input.apiVersion || "2025-01").trim();
 
       // If no new token provided, load the saved one from DB (never expose to client)
       if (!token && db) {
-        const saved = await db.select({ accessToken: shopifyIntegration.accessToken })
+        const saved = await db
+          .select({ accessToken: shopifyIntegration.accessToken, shopName: shopifyIntegration.shopName, apiVersion: shopifyIntegration.apiVersion })
           .from(shopifyIntegration).limit(1);
-        token = saved[0]?.accessToken ?? "";
+        if (saved.length) {
+          token = (saved[0].accessToken ?? "").trim();
+          // Also use saved shop name if none provided
+          if (!shopName) shopName = (saved[0].shopName ?? "").trim();
+          if (!apiVersion || apiVersion === "2024-01") apiVersion = (saved[0].apiVersion ?? "2025-01").trim();
+        }
       }
 
-      if (!token) return { success: false, error: "لا يوجد Access Token محفوظ" };
+      if (!token) return { success: false, error: "لا يوجد Access Token — أدخل الـ Token أولاً واضغط حفظ" };
+      if (!shopName) return { success: false, error: "أدخل اسم المتجر" };
 
       try {
-        const data = await shopifyFetch(input.shopName, token, "/shop.json", input.apiVersion);
+        const data = await shopifyFetch(shopName, token, "/shop.json", apiVersion);
         return {
           success: true,
           shopInfo: {

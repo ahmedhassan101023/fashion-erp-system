@@ -23,7 +23,7 @@ import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, LogOut, PanelLeft, Package, ShoppingCart,
-  BarChart3, Wallet, Users, Truck, Settings, UserCircle, Brain
+  BarChart3, Wallet, Users, Truck, Settings, UserCircle, Brain, Activity
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -40,6 +40,7 @@ const menuItems = [
   { icon: Users, label: "الفريق", path: "/team" },
   { icon: UserCircle, label: "العملاء", path: "/customers" },
   { icon: Brain, label: "الذكاء الاصطناعي", path: "/ai-insights" },
+  { icon: Activity, label: "صحة النظام", path: "/system-health" },
   { icon: Settings, label: "الإعدادات", path: "/settings" },
 ];
 

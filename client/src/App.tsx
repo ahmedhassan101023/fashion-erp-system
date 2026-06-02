@@ -15,6 +15,7 @@ import Team from "./pages/Team";
 import Customers from "./pages/Customers";
 import Settings from "./pages/Settings";
 import AIInsights from "./pages/AIInsights";
+import SystemHealth from "./pages/SystemHealth";
 import DashboardLayout from "./components/DashboardLayout";
 import { SitePasswordGate } from "./components/SitePasswordGate";
 
@@ -59,6 +60,9 @@ function Router() {
       </Route>
       <Route path="/ai-insights">
         <AuthenticatedLayout><AIInsights /></AuthenticatedLayout>
+      </Route>
+      <Route path="/system-health">
+        <AuthenticatedLayout><SystemHealth /></AuthenticatedLayout>
       </Route>
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

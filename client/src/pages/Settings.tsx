@@ -372,16 +372,17 @@ function ShopifyIntegrationPanel() {
 
   const [shopName, setShopName] = useState("");
   const [accessToken, setAccessToken] = useState("");
-  const [apiVersion, setApiVersion] = useState("2024-01");
+  const [apiVersion, setApiVersion] = useState("2025-01");
   const [showToken, setShowToken] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; shopInfo?: any; error?: string } | null>(null);
   const [syncResult, setSyncResult] = useState<{ syncedCount: number; total: number } | null>(null);
+  const [productSyncResult, setProductSyncResult] = useState<{ syncedCount: number } | null>(null);
 
   // Pre-fill form when config loads
   useEffect(() => {
     if (config) {
       setShopName(config.shopName ?? "");
-      setApiVersion(config.apiVersion ?? "2024-01");
+      setApiVersion(config.apiVersion ?? "2025-01");
     }
   }, [config]);
 
@@ -413,7 +414,9 @@ function ShopifyIntegrationPanel() {
 
   const syncProducts = trpc.integrations.syncShopifyProducts.useMutation({
     onSuccess: (data) => {
+      setProductSyncResult({ syncedCount: data.syncedCount });
       toast.success(`تمت مزامنة المنتجات: ${data.syncedCount} منتج جديد`);
+      utils.integrations.getSyncLogs.invalidate();
     },
     onError: (e) => toast.error(`فشل مزامنة المنتجات: ${e.message}`),
   });
@@ -447,86 +450,135 @@ function ShopifyIntegrationPanel() {
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-6">
+
+        {/* Step-by-step guide */}
+        <div className="rounded-xl bg-blue-50 border border-blue-200 p-4 text-sm text-blue-800 space-y-2">
+          <p className="font-semibold">📋 كيفية الحصول على Access Token من Shopify:</p>
+          <ol className="list-decimal list-inside space-y-1 text-blue-700">
+            <li>افتح <strong>Shopify Admin</strong> → <strong>Settings</strong> → <strong>Apps and sales channels</strong></li>
+            <li>اضغط <strong>Develop apps</strong> ثم <strong>Create an app</strong></li>
+            <li>أدخل اسم التطبيق واضغط <strong>Create app</strong></li>
+            <li>اضغط <strong>Configure Admin API scopes</strong> وفعّل: <code>read_orders, write_orders, read_products, write_products, read_inventory</code></li>
+            <li>اضغط <strong>Save</strong> ثم <strong>Install app</strong></li>
+            <li>انسخ <strong>Admin API access token</strong> (يبدأ بـ <code>shpat_</code>)</li>
+          </ol>
+          <p className="text-xs text-blue-600 mt-1">⚠️ الـ Token يظهر مرة واحدة فقط — احفظه فوراً</p>
+        </div>
+
         {/* Connection Form */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>اسم المتجر <span className="text-destructive">*</span></Label>
             <Input
               value={shopName}
-              onChange={(e) => setShopName(e.target.value)}
+              onChange={(e) => setShopName(e.target.value.trim())}
               placeholder="your-store"
               dir="ltr"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
             />
-            <p className="text-xs text-muted-foreground">بدون .myshopify.com</p>
+            <p className="text-xs text-muted-foreground">
+              مثال: إذا كان رابط متجرك <code>my-brand.myshopify.com</code> أدخل <code>my-brand</code> فقط
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>API Version</Label>
             <Input
               value={apiVersion}
-              onChange={(e) => setApiVersion(e.target.value)}
-              placeholder="2024-01"
+              onChange={(e) => setApiVersion(e.target.value.trim())}
+              placeholder="2025-01"
               dir="ltr"
             />
+            <p className="text-xs text-muted-foreground">الإصدار الحالي المدعوم: 2025-01</p>
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <Label>Access Token <span className="text-destructive">*</span></Label>
+          <Label>Admin API Access Token <span className="text-destructive">*</span></Label>
           <div className="relative">
             <Input
               type={showToken ? "text" : "password"}
               value={accessToken}
               onChange={(e) => setAccessToken(e.target.value)}
-              placeholder={config?.accessTokenMasked || "shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+              placeholder={config?.accessTokenMasked ? `محفوظ: ${config.accessTokenMasked}` : "shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
               dir="ltr"
-              className="pl-10"
+              className="pr-10 font-mono text-sm"
+              autoComplete="new-password"
+              spellCheck={false}
             />
             <button
               type="button"
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               onClick={() => setShowToken(!showToken)}
             >
               {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            من Shopify Admin → Apps → Develop apps → Create an app → Admin API access token
-          </p>
+          {config?.accessTokenMasked && !accessToken && (
+            <p className="text-xs text-green-600">✅ يوجد token محفوظ — اتركه فارغاً إذا لم تريد تغييره</p>
+          )}
+          {accessToken && !accessToken.trim().startsWith("shpat_") && (
+            <p className="text-xs text-amber-600">⚠️ الـ Token عادةً يبدأ بـ shpat_ — تأكد من نسخه كاملاً</p>
+          )}
         </div>
 
         {/* Error message */}
         {isError && config?.syncErrorMessage && (
           <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
-            <strong>آخر خطأ:</strong> {config.syncErrorMessage}
+            <p className="font-semibold mb-1">آخر خطأ:</p>
+            <p className="font-mono text-xs break-all">{config.syncErrorMessage}</p>
           </div>
         )}
 
         {/* Test result */}
         {testResult && (
-          <div className={`rounded-xl border p-4 ${testResult.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+          <div className={`rounded-xl border p-4 ${
+            testResult.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
+          }`}>
             {testResult.success && testResult.shopInfo ? (
-              <div className="space-y-2">
-                <p className="font-medium text-green-800 flex items-center gap-2">
-                  ✅ تم الاتصال بنجاح بـ {testResult.shopInfo.name}
-                </p>
-                <div className="grid grid-cols-2 gap-2 text-sm text-green-700">
-                  <span>📧 {testResult.shopInfo.email}</span>
-                  <span>💰 {testResult.shopInfo.currency}</span>
-                  <span>🌍 {testResult.shopInfo.country}</span>
-                  <span>📦 {testResult.shopInfo.plan}</span>
+              <div className="space-y-3">
+                <p className="font-semibold text-green-800">✅ تم الاتصال بنجاح!</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm text-green-700">
+                  <span><strong>المتجر:</strong> {testResult.shopInfo.name}</span>
+                  <span><strong>البريد:</strong> {testResult.shopInfo.email}</span>
+                  <span><strong>العملة:</strong> {testResult.shopInfo.currency}</span>
+                  <span><strong>الدولة:</strong> {testResult.shopInfo.country}</span>
+                  <span><strong>الخطة:</strong> {testResult.shopInfo.plan}</span>
+                  <span><strong>الدومين:</strong> {testResult.shopInfo.domain}</span>
                 </div>
+                <p className="text-xs text-green-600">الآن يمكنك حفظ البيانات ثم مزامنة الطلبات والمنتجات</p>
               </div>
             ) : (
-              <p className="text-red-700 text-sm">❌ {testResult.error}</p>
+              <div className="space-y-2">
+                <p className="font-semibold text-red-700">❌ فشل الاتصال</p>
+                <p className="text-sm text-red-600 font-mono break-all">{testResult.error}</p>
+                <div className="text-xs text-red-500 space-y-1 mt-2 border-t border-red-200 pt-2">
+                  <p className="font-semibold">خطوات التحقق:</p>
+                  <p>• تأكد أن اسم المتجر صحيح (بدون .myshopify.com)</p>
+                  <p>• تأكد أن الـ Token منسوخ كاملاً ويبدأ بـ shpat_</p>
+                  <p>• تأكد أن التطبيق مثبّت في Shopify Admin (Install app)</p>
+                  <p>• تأكد أن الـ scopes تشمل read_orders و read_products</p>
+                </div>
+              </div>
             )}
           </div>
         )}
 
-        {/* Sync result */}
-        {syncResult && (
-          <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
-            ✅ تمت المزامنة: <strong>{syncResult.syncedCount}</strong> طلب جديد من أصل <strong>{syncResult.total}</strong> طلب
+        {/* Sync results */}
+        {(syncResult || productSyncResult) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {syncResult && (
+              <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
+                ✅ الطلبات: <strong>{syncResult.syncedCount}</strong> جديد من أصل <strong>{syncResult.total}</strong>
+              </div>
+            )}
+            {productSyncResult && (
+              <div className="rounded-xl bg-purple-50 border border-purple-200 p-3 text-sm text-purple-800">
+                ✅ المنتجات: <strong>{productSyncResult.syncedCount}</strong> منتج تمت مزامنته
+              </div>
+            )}
           </div>
         )}
 
@@ -534,17 +586,29 @@ function ShopifyIntegrationPanel() {
         <div className="flex flex-wrap gap-3">
           <Button
             variant="outline"
-            onClick={() => testConnection.mutate({ shopName, accessToken: accessToken, apiVersion })}
-            disabled={!shopName || testConnection.isPending}
+            onClick={() => {
+              setTestResult(null);
+              testConnection.mutate({ shopName, accessToken, apiVersion });
+            }}
+            disabled={(!shopName && !config?.shopName) || testConnection.isPending}
           >
-            {testConnection.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+            {testConnection.isPending
+              ? <Loader2 className="h-4 w-4 animate-spin ml-2" />
+              : null
+            }
             اختبار الاتصال
           </Button>
 
           <Button
             onClick={() => {
-              if (!shopName || !accessToken) return toast.error("أدخل اسم المتجر والـ Access Token");
-              saveConfig.mutate({ shopName, accessToken, apiVersion });
+              if (!shopName) return toast.error("أدخل اسم المتجر");
+              if (!accessToken && !config?.accessTokenMasked) return toast.error("أدخل الـ Access Token");
+              // If no new token typed, send empty string — backend will preserve the saved token
+              saveConfig.mutate({
+                shopName,
+                accessToken: accessToken.trim(),
+                apiVersion,
+              });
             }}
             disabled={saveConfig.isPending}
           >
@@ -587,9 +651,12 @@ function ShopifyIntegrationPanel() {
                       log.status === "failed" ? "bg-red-500" :
                       "bg-yellow-500"
                     }`} />
-                    <span className="font-medium capitalize">{log.syncType === "orders" ? "طلبات" : "منتجات"}</span>
+                    <span className="font-medium">{log.syncType === "orders" ? "طلبات" : "منتجات"}</span>
                     {log.itemsProcessed != null && (
                       <span className="text-muted-foreground">{log.itemsProcessed} عنصر</span>
+                    )}
+                    {log.status === "failed" && log.errorMessage && (
+                      <span className="text-red-500 text-xs truncate max-w-48">{log.errorMessage}</span>
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground">
