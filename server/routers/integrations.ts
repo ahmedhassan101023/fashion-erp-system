@@ -16,7 +16,7 @@ async function shopifyFetch(
   shopName: string,
   accessToken: string,
   path: string,
-  apiVersion = "2025-01"
+  apiVersion = "2026-04"
 ) {
   // Strip trailing .myshopify.com / trailing slash / whitespace
   const cleanShop = shopName
@@ -64,7 +64,7 @@ async function shopifyFetchAll(
   accessToken: string,
   path: string,
   rootKey: string,
-  apiVersion = "2025-01"
+  apiVersion = "2026-04"
 ): Promise<any[]> {
   const cleanShop = shopName
     .replace(/https?:\/\//i, "")
@@ -123,7 +123,7 @@ export const integrationsRouter = router({
         ? "•".repeat(Math.max(0, row.accessToken.length - 4)) +
           row.accessToken.slice(-4)
         : "",
-      apiVersion: row.apiVersion ?? "2024-01",
+      apiVersion: row.apiVersion ?? "2026-04",
       status: row.status,
       lastSyncDate: row.lastSyncDate,
       syncErrorMessage: row.syncErrorMessage,
@@ -136,7 +136,7 @@ export const integrationsRouter = router({
       z.object({
         shopName: z.string().min(1, "اسم المتجر مطلوب"),
         accessToken: z.string().min(1, "Access Token مطلوب"),
-        apiVersion: z.string().default("2024-01"),
+        apiVersion: z.string().default("2026-04"),
       })
     )
     .mutation(async ({ input }) => {
@@ -150,7 +150,7 @@ export const integrationsRouter = router({
         .replace(/\/$/, "")
         .trim();
       const newToken = input.accessToken.trim();
-      const cleanVersion = (input.apiVersion || "2025-01").trim();
+      const cleanVersion = (input.apiVersion || "2026-04").trim();
 
       if (!cleanShop) throw new Error("اسم المتجر فارغ");
 
@@ -195,7 +195,7 @@ export const integrationsRouter = router({
         shopName: z.string(),
         // Empty string means "use the saved token"
         accessToken: z.string().default(""),
-        apiVersion: z.string().default("2024-01"),
+        apiVersion: z.string().default("2026-04"),
       })
     )
     .mutation(async ({ input }) => {
@@ -204,7 +204,7 @@ export const integrationsRouter = router({
       // Always prefer the freshly-typed token; fall back to saved DB token
       let token = input.accessToken.trim();
       let shopName = input.shopName.trim();
-      let apiVersion = (input.apiVersion || "2025-01").trim();
+      let apiVersion = (input.apiVersion || "2026-04").trim();
 
       // If no new token provided, load the saved one from DB (never expose to client)
       if (!token && db) {
@@ -215,7 +215,7 @@ export const integrationsRouter = router({
           token = (saved[0].accessToken ?? "").trim();
           // Also use saved shop name if none provided
           if (!shopName) shopName = (saved[0].shopName ?? "").trim();
-          if (!apiVersion || apiVersion === "2024-01") apiVersion = (saved[0].apiVersion ?? "2025-01").trim();
+          if (!apiVersion || apiVersion === "2026-04") apiVersion = (saved[0].apiVersion ?? "2026-04").trim();
         }
       }
 
@@ -258,7 +258,7 @@ export const integrationsRouter = router({
       }
 
       const { shopName, accessToken, apiVersion } = config[0];
-      const av = apiVersion ?? "2024-01";
+      const av = apiVersion ?? "2026-04";
 
       // Create sync log entry
       const logResult = await db.insert(shopifySyncLog).values({
@@ -412,7 +412,7 @@ export const integrationsRouter = router({
     }
 
     const { shopName, accessToken, apiVersion } = config[0];
-    const av = apiVersion ?? "2024-01";
+    const av = apiVersion ?? "2026-04";
 
     const logResult = await db.insert(shopifySyncLog).values({
       syncType: "products",

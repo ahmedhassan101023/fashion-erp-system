@@ -17,7 +17,6 @@ import Settings from "./pages/Settings";
 import AIInsights from "./pages/AIInsights";
 import SystemHealth from "./pages/SystemHealth";
 import DashboardLayout from "./components/DashboardLayout";
-import { SitePasswordGate } from "./components/SitePasswordGate";
 
 function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -76,9 +75,7 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
-          <SitePasswordGate>
-            <Router />
-          </SitePasswordGate>
+          <Router />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

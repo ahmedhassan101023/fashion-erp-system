@@ -253,24 +253,24 @@ describe("Shopify pagination link header parsing", () => {
 
   it("extracts next URL from Link header", () => {
     const link =
-      '<https://store.myshopify.com/admin/api/2024-01/orders.json?page_info=abc123>; rel="next"';
+      '<https://store.myshopify.com/admin/api/2026-04/orders.json?page_info=abc123>; rel="next"';
     expect(extractNextUrl(link)).toBe(
-      "https://store.myshopify.com/admin/api/2024-01/orders.json?page_info=abc123"
+      "https://store.myshopify.com/admin/api/2026-04/orders.json?page_info=abc123"
     );
   });
 
   it("returns empty string when no next link", () => {
     const link =
-      '<https://store.myshopify.com/admin/api/2024-01/orders.json?page_info=prev>; rel="previous"';
+      '<https://store.myshopify.com/admin/api/2026-04/orders.json?page_info=prev>; rel="previous"';
     expect(extractNextUrl(link)).toBe("");
   });
 
   it("handles combined previous+next link header", () => {
     const link =
-      '<https://store.myshopify.com/admin/api/2024-01/orders.json?page_info=prev>; rel="previous", ' +
-      '<https://store.myshopify.com/admin/api/2024-01/orders.json?page_info=next123>; rel="next"';
+      '<https://store.myshopify.com/admin/api/2026-04/orders.json?page_info=prev>; rel="previous", ' +
+      '<https://store.myshopify.com/admin/api/2026-04/orders.json?page_info=next123>; rel="next"';
     expect(extractNextUrl(link)).toBe(
-      "https://store.myshopify.com/admin/api/2024-01/orders.json?page_info=next123"
+      "https://store.myshopify.com/admin/api/2026-04/orders.json?page_info=next123"
     );
   });
 

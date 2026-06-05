@@ -148,7 +148,7 @@ export function validateShopifyWebhookSignature(
 export async function fetchShopifyOrders(
   shopName: string,
   accessToken: string,
-  apiVersion: string = '2024-01',
+  apiVersion: string = '2026-04',
   status: string = 'any'
 ): Promise<ShopifyOrderData[]> {
   try {
@@ -180,7 +180,7 @@ export async function fetchShopifyOrders(
 export async function fetchShopifyProducts(
   shopName: string,
   accessToken: string,
-  apiVersion: string = '2024-01'
+  apiVersion: string = '2026-04'
 ): Promise<any[]> {
   try {
     const url = `https://${shopName}.myshopify.com/admin/api/${apiVersion}/products.json?limit=250`;
@@ -211,7 +211,7 @@ export async function fetchShopifyProducts(
 export async function fetchShopifyInventory(
   shopName: string,
   accessToken: string,
-  apiVersion: string = '2024-01'
+  apiVersion: string = '2026-04'
 ): Promise<any[]> {
   try {
     const url = `https://${shopName}.myshopify.com/admin/api/${apiVersion}/inventory_levels.json`;

@@ -372,7 +372,7 @@ function ShopifyIntegrationPanel() {
 
   const [shopName, setShopName] = useState("");
   const [accessToken, setAccessToken] = useState("");
-  const [apiVersion, setApiVersion] = useState("2025-01");
+  const [apiVersion, setApiVersion] = useState("2026-04");
   const [showToken, setShowToken] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; shopInfo?: any; error?: string } | null>(null);
   const [syncResult, setSyncResult] = useState<{ syncedCount: number; total: number } | null>(null);
@@ -382,7 +382,7 @@ function ShopifyIntegrationPanel() {
   useEffect(() => {
     if (config) {
       setShopName(config.shopName ?? "");
-      setApiVersion(config.apiVersion ?? "2025-01");
+      setApiVersion(config.apiVersion ?? "2026-04");
     }
   }, [config]);
 
@@ -488,10 +488,10 @@ function ShopifyIntegrationPanel() {
             <Input
               value={apiVersion}
               onChange={(e) => setApiVersion(e.target.value.trim())}
-              placeholder="2025-01"
+              placeholder="2026-04"
               dir="ltr"
             />
-            <p className="text-xs text-muted-foreground">الإصدار الحالي المدعوم: 2025-01</p>
+            <p className="text-xs text-muted-foreground">الإصدار الحالي المدعوم: 2026-04</p>
           </div>
         </div>
 
